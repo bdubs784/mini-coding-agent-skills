@@ -1,11 +1,9 @@
 Group 23: Andrew Barnett, Blaine Watkins
 
 Repository (private, instructors added as collaborators):
-PLACEHOLDER_REPO_URL
+https://github.com/bdubs784/mini-coding-agent-skills
 
 Demo workspace sources:
-Lab 4 repo: PLACEHOLDER_LAB4_URL
-Lab 5 repo: PLACEHOLDER_LAB5_URL
+Lab 4 repo: https://github.com/bdubs784/vacuum-rl-context-engineering
+Lab 5 repo: https://github.com/bdubs784/vacuum-rl-context-engineering-lab5
 
-Video (private link):
-PLACEHOLDER_VIDEO_URL
