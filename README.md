@@ -72,8 +72,9 @@ New REPL commands: `/skills` (list skills and log path), `/skill NAME [task]`.
 
 Lab 4 set up the vacuum Q-learning problem for a coding agent. Lab 5 solved it with Claude Code
 and added the skills `tune`, `render-policy`, and `submit-check`. The demo workspace is our Lab 4
-repo plus the Lab 5 `src/` code and the Lab 5 skills moved to `skills/` (only path fixes, see
-`demo/setup_lab4_demo.py`).
+repo plus the Lab 5 `src/` code and the Lab 5 skills moved to `skills/`. The setup fixes paths,
+and gives the `tune` skill a `--out` flag so the small model does not have to retype four tables
+(see `demo/setup_lab4_demo.py` and the Risks section of `sdlc/plan.md`).
 
 Needs Python 3.10+, numpy, and Ollama with a model pulled (`ollama pull qwen3.5:4b`).
 
@@ -85,7 +86,7 @@ python demo/setup_lab4_demo.py --lab4 ../vacuum-rl-context-engineering --lab5 ..
 python demo/replay_demo.py --cwd tmp/lab4-demo
 
 # 3. real run with Ollama
-python mini_coding_agent.py --cwd tmp/lab4-demo --approval auto --max-steps 12 --max-new-tokens 1024
+python mini_coding_agent.py --cwd tmp/lab4-demo --approval auto --max-steps 20 --max-new-tokens 2048
 ```
 
 Prompts we use in the REPL:

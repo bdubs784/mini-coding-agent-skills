@@ -9,8 +9,13 @@ finish Lab 4 using those Lab 5 skills:
     <out>/src/                vacuum_env.py and q_agent.py (+ tests) from Lab 5
     <out>/skills/<name>/      the Lab 5 skills, moved from .claude/skills/ to skills/
 
-The only edits to the Lab 5 skills are path fixes: ".claude/skills/" becomes "skills/" in
-SKILL.md, and the scripts look for src/ one folder higher (parents[3] -> parents[2]).
+Edits to the Lab 5 skills:
+- path fixes: ".claude/skills/" becomes "skills/" in SKILL.md, and the scripts look for src/
+  one folder higher (parents[3] -> parents[2]).
+- tune, adapted for a 4B local model (see SMALL_MODEL_TUNE): sweep.py gets an --out flag that
+  appends each table to a file, so the model does not have to retype four tables into one long
+  write_file call (qwen3.5:4b ran out of output tokens doing that). The model only writes the
+  short file with the chosen values. Pass --original-skills to skip this.
 
 Usage:
     python demo/setup_lab4_demo.py --lab4 PATH_TO_LAB4_REPO --lab5 PATH_TO_LAB5_REPO --out tmp/lab4-demo
@@ -22,7 +27,60 @@ import sys
 from pathlib import Path
 
 SRC_FILES = ("vacuum_env.py", "q_agent.py", "test_vacuum_env.py", "test_q_agent.py")
+SWEEP_OUT_ARG = """    parser.add_argument("--out", help="Also append the table to this markdown file.")
+    args = parser.parse_args()
+    if args.out:
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_file = out_path.open("a", encoding="utf-8")
+        screen = sys.stdout
+
+        class Tee:
+            def write(self, text):
+                screen.write(text)
+                out_file.write(text)
+
+            def flush(self):
+                screen.flush()
+                out_file.flush()
+
+        sys.stdout = Tee()
+"""
+
+SMALL_MODEL_TUNE = {
+    "--values -2 -0.4 -0.04 0 1": "--values -2 -0.4 -0.04 0 1 --out results/hyperparams.md",
+    "--values 0.5 0.7 0.9 0.99": "--values 0.5 0.7 0.9 0.99 --out results/hyperparams.md",
+    "--values 0.05 0.1 0.3 0.5 0.9": "--values 0.05 0.1 0.3 0.5 0.9 --out results/hyperparams.md",
+    "--values 0.05 0.2 0.5 0.8 1.0": "--values 0.05 0.2 0.5 0.8 1.0 --out results/hyperparams.md",
+    "4. Write `results/hyperparams.md`: the four tables, the chosen values, and one sentence per":
+        "4. The four tables are already saved in `results/hyperparams.md` by `--out`, do not copy them.\n"
+        "   Use write_file to create `results/hyperparams-choice.md` with only the chosen values and one sentence per",
+}
+
 SKIP = shutil.ignore_patterns(".git", "__pycache__", "*.pyc", ".mini-coding-agent", "class_context")
+
+
+def adapt_tune(folder):
+    sweep, skill = folder / "sweep.py", folder / "SKILL.md"
+    if not sweep.is_file() or not skill.is_file():
+        return
+    code = sweep.read_text(encoding="utf-8")
+    if "args = parser.parse_args()\n" in code and "--out" not in code:
+        code = code.replace("    args = parser.parse_args()\n", SWEEP_OUT_ARG, 1)
+        for name in ("sys", "from pathlib import Path"):
+            line = name if name.startswith("from") else f"import {name}"
+            if line not in code:
+                code = line + "\n" + code
+        sweep.write_text(code, encoding="utf-8")
+    text = skill.read_text(encoding="utf-8")
+    missing = [old for old in SMALL_MODEL_TUNE if old not in text]
+    for old, new in SMALL_MODEL_TUNE.items():
+        text = text.replace(old, new)
+    text = text.replace("5. Report the chosen values in at most 5 lines.",
+                        "5. Answer with <final> and the chosen values in at most 5 lines.")
+    skill.write_text(text, encoding="utf-8")
+    if missing:
+        print("warning: tune SKILL.md did not match the expected text, check it by hand:", missing)
 
 
 def main(argv=None):
@@ -31,6 +89,7 @@ def main(argv=None):
     parser.add_argument("--lab5", required=True, help="Path to the Lab 5 repo (vacuum-rl-context-engineering-lab5).")
     parser.add_argument("--out", default="tmp/lab4-demo", help="Where to build the demo workspace.")
     parser.add_argument("--force", action="store_true", help="Delete --out first if it exists.")
+    parser.add_argument("--original-skills", action="store_true", help="Copy the Lab 5 skills with path fixes only.")
     args = parser.parse_args(argv)
 
     lab4, lab5, out = Path(args.lab4).resolve(), Path(args.lab5).resolve(), Path(args.out).resolve()
@@ -60,6 +119,9 @@ def main(argv=None):
                 text = path.read_text(encoding="utf-8").replace(".claude/skills/", "skills/")
                 path.write_text(text.replace(".parents[3]", ".parents[2]"), encoding="utf-8")
 
+    if not args.original_skills:
+        adapt_tune(skills_out / "tune")
+
     # The Lab 4 skill drives Claude Code sub-agents, which mini-coding-agent does not have.
     shutil.rmtree(out / ".claude" / "skills", ignore_errors=True)
     (out / "results").mkdir(exist_ok=True)
@@ -75,7 +137,7 @@ def main(argv=None):
     print(f"demo workspace ready: {out}")
     print("skills:", ", ".join(sorted(p.name for p in skills_out.iterdir() if p.is_dir())))
     print("next:")
-    print(f"  python mini_coding_agent.py --cwd {out} --approval auto --max-steps 12 --max-new-tokens 1024")
+    print(f"  python mini_coding_agent.py --cwd {out} --approval auto --max-steps 20 --max-new-tokens 2048")
     return 0
 
 

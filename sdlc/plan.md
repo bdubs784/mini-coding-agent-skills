@@ -43,8 +43,14 @@ python demo/replay_demo.py --cwd tmp/lab4-demo
 
 ## Risks
 
-- A 4B model may ignore the skill steps or stop early. We raise `--max-steps` to 12 and
-  `--max-new-tokens` to 1024 for the demo, and the replay script shows the expected flow.
+- A 4B model may ignore the skill steps or stop early. In our first real run with qwen3.5:4b the
+  model called `use_skill` again for the skill that was already active and ran out of the 12
+  steps. We now log that as `skill_already_active` and tell the model to continue. In the second
+  run it did all four sweeps and picked good values, but it tried to retype all four tables into
+  its answer and ran out of output tokens before writing the file. So the demo setup gives
+  `sweep.py` an `--out` flag that saves each table itself, and the model only writes a short
+  `results/hyperparams-choice.md`. We also raised the demo limits to `--max-steps 20` and
+  `--max-new-tokens 2048`.
 - The sweep script can take longer than the `run_shell` 120 second cap on a slow laptop. Each
   sweep takes about 3 seconds on our machine, so this is unlikely.
 - Bag of words matching misses synonyms ("make it learn faster" scores 0 for `tune`). The
