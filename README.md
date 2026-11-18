@@ -1,5 +1,112 @@
 &nbsp;
-# Mini-Coding-Agent
+# Mini-Coding-Agent + Agent Skills (CS440 Group 23)
+
+**Group 23:** Andrew Barnett, Blaine Watkins
+
+This is a copy of [rasbt/mini-coding-agent](https://github.com/rasbt/mini-coding-agent) with a
+seventh component added: **Agent Skills**. The agent finds skill folders such as
+`skills/pr-review/SKILL.md`, runs a similarity check between each prompt and every skill, and
+executes the matching skill's instructions. It can also load a skill in the middle of a task
+with a `use_skill` tool. Every prompt, similarity check, and executed skill is logged to
+`.mini-coding-agent/logs/`. We used it with our Lab 5 skills to finish Lab 4.
+
+Quick links: [What we added](#agent-skills-what-we-added) ·
+[Run the Lab 4 demo](#run-the-lab-4-demo) · SDLC: [intent](sdlc/intent.md) ·
+[spec](sdlc/spec.md) · [plan](sdlc/plan.md)
+
+&nbsp;
+## Agent Skills: what we added
+
+### Project structure
+
+```
+mini-coding-agent/
+├── mini_coding_agent.py      # the agent; component 7 = Skill, SkillRegistry, SkillLogger,
+│                             #   MiniAgent.match_skills / activate_skill / tool_use_skill
+├── skills/
+│   └── pr-review/SKILL.md    # example skill (folder skill format)
+├── sdlc/                     # SDLC stages for this change
+│   ├── intent.md             #   1. what and why
+│   ├── spec.md               #   2. exact behavior + acceptance tests
+│   └── plan.md               #   3. design decisions, task list, verification, risks
+├── demo/
+│   ├── setup_lab4_demo.py    # builds the Lab 4 workspace with our Lab 5 skills in skills/
+│   ├── replay_demo.py        # offline run of the demo with scripted model replies (no Ollama)
+│   └── logs/                 # log files saved from our real Ollama run
+├── tests/
+│   ├── test_mini_coding_agent.py   # original tests (unchanged)
+│   └── test_skills.py              # tests for the skills component
+└── README.md
+```
+
+### How it works
+
+1. **Discovery.** At start the agent loads every `<folder>/<skill>/SKILL.md` under `skills/`,
+   `skill/`, `.agents/skills/`, and `.claude/skills/` in the workspace (plus any `--skills-dir`).
+   The frontmatter gives `name`, `description`, and optionally `disable-model-invocation: true`.
+2. **Similarity check.** For each prompt, every skill gets a score: 1.0 if the skill name is in
+   the prompt, otherwise cosine similarity of word counts between the prompt and the skill's
+   name plus description. The best skill runs if it scores at least the threshold (0.2).
+3. **Execution.** The active skill's steps are added to the prompt as an `Active skill` section,
+   and the model carries them out with the normal tools (same approval rules).
+4. **Mid-task.** The model can call `use_skill(name, reason)` when it realizes it needs a skill.
+   The user can force one with `/skill NAME` or `/NAME`.
+5. **Logs.** `.mini-coding-agent/logs/skills.log` (readable) and `skills.jsonl` (one JSON per
+   event): `prompt`, `similarity_check` (all scores, threshold, selected), `skill_executed`
+   (skill, trigger, score, file), `skill_finished` (tools used, final answer).
+
+Example `skills.log`:
+
+```
+[2026-11-17 18:00:45] PROMPT (user): Tune the hyperparameters for the vacuum Q-learner: choose gamma, alpha, epsilon and the living reward.
+[2026-11-17 18:00:45] SIMILARITY (user prompt) threshold=0.2 scores: tune=1.000, render-policy=0.043 -> selected: tune
+[2026-11-17 18:00:45] EXECUTED skill=tune via=user prompt score=1.0 file=.../skills/tune/SKILL.md
+[2026-11-17 18:00:47] FINISHED skill=tune tools=[list_files, run_shell] result: Ran the gamma sweep ...
+```
+
+New flags: `--skills-dir PATH` (repeatable), `--skill-threshold 0.2`, `--no-skills`.
+New REPL commands: `/skills` (list skills and log path), `/skill NAME [task]`.
+
+&nbsp;
+## Run the Lab 4 demo
+
+Lab 4 set up the vacuum Q-learning problem for a coding agent. Lab 5 solved it with Claude Code
+and added the skills `tune`, `render-policy`, and `submit-check`. The demo workspace is our Lab 4
+repo plus the Lab 5 `src/` code and the Lab 5 skills moved to `skills/` (only path fixes, see
+`demo/setup_lab4_demo.py`).
+
+Needs Python 3.10+, numpy, and Ollama with a model pulled (`ollama pull qwen3.5:4b`).
+
+```bash
+# 1. build the workspace (paths to your clones of our Lab 4 and Lab 5 repos)
+python demo/setup_lab4_demo.py --lab4 ../vacuum-rl-context-engineering --lab5 ../vacuum-rl-context-engineering-lab5 --out tmp/lab4-demo
+
+# 2. optional: offline check without Ollama
+python demo/replay_demo.py --cwd tmp/lab4-demo
+
+# 3. real run with Ollama
+python mini_coding_agent.py --cwd tmp/lab4-demo --approval auto --max-steps 12 --max-new-tokens 1024
+```
+
+Prompts we use in the REPL:
+
+```
+/skills
+Tune the hyperparameters for the vacuum Q-learner and write results/hyperparams.md
+Solve Lab 4: train the vacuum Q-learning agent and show the learned policy compared to value iteration
+/skill submit-check
+```
+
+Then open `tmp/lab4-demo/.mini-coding-agent/logs/skills.log`.
+
+Tests: `python -m pytest -q`
+
+The rest of this README is the original project's documentation.
+
+&nbsp;
+# Original README
+
+## Mini-Coding-Agent
 
 This folder contains a small standalone coding agent:
 
@@ -192,6 +299,10 @@ being sent to the model as a normal task.
   prints the distilled session memory, including the current task, tracked files, and notes
 - `/session`
   prints the path to the current saved session JSON file
+- `/skills`
+  lists the discovered agent skills, the similarity threshold, and the skill log path
+- `/skill NAME [task]`
+  runs a skill directly without the similarity check (also works for manual-only skills)
 - `/reset`
   clears the current session history and distilled memory but keeps you in the REPL
 - `/exit`
@@ -237,6 +348,12 @@ Important flags:
   controls sampling randomness; default: `0.2`
 - `--top-p`
   controls nucleus sampling for generation; default: `0.9`
+- `--skills-dir`
+  adds a folder of skills to scan (repeatable); `skills/`, `skill/`, `.agents/skills/`, `.claude/skills/` are always scanned
+- `--skill-threshold`
+  minimum similarity score for a prompt to trigger a skill; default: `0.2`
+- `--no-skills`
+  turns the agent skills component off
 
 &nbsp;
 ## Example

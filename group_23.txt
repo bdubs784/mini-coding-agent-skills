@@ -1,0 +1,11 @@
+Group 23: Andrew Barnett, Blaine Watkins
+
+Repository (private, instructors added as collaborators):
+PLACEHOLDER_REPO_URL
+
+Demo workspace sources:
+Lab 4 repo: PLACEHOLDER_LAB4_URL
+Lab 5 repo: PLACEHOLDER_LAB5_URL
+
+Video (private link):
+PLACEHOLDER_VIDEO_URL
