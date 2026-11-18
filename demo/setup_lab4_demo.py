@@ -64,8 +64,13 @@ def main(argv=None):
     shutil.rmtree(out / ".claude" / "skills", ignore_errors=True)
     (out / "results").mkdir(exist_ok=True)
 
+    # The agent treats the git top level as the workspace root. Without its own repo, a
+    # workspace inside this project would resolve to mini-coding-agent itself.
     if not (out / ".git").exists():
-        subprocess.run(["git", "init", "-q"], cwd=out, check=False)
+        subprocess.run(["git", "init", "-q"], cwd=out, check=True)
+    top = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=out, capture_output=True, text=True)
+    if Path(top.stdout.strip()).resolve() != out:
+        sys.exit(f"git init in {out} did not work, run `git init` there by hand")
 
     print(f"demo workspace ready: {out}")
     print("skills:", ", ".join(sorted(p.name for p in skills_out.iterdir() if p.is_dir())))

@@ -41,6 +41,11 @@ def main(argv=None):
     parser.add_argument("--cwd", default="tmp/lab4-demo")
     args = parser.parse_args(argv)
     workspace = WorkspaceContext.build(args.cwd)
+    if Path(workspace.repo_root).resolve() != Path(args.cwd).resolve():
+        sys.exit(
+            f"{args.cwd} is not its own git repo (resolved to {workspace.repo_root}). "
+            "Run demo/setup_lab4_demo.py first, or run `git init` inside it."
+        )
     store = SessionStore(Path(workspace.repo_root) / ".mini-coding-agent" / "sessions")
     agent = MiniAgent(
         model_client=FakeModelClient(SCRIPT_1 + SCRIPT_2 + SCRIPT_3),
