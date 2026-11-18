@@ -17,6 +17,7 @@ SKILL_FILE_NAMES = ("SKILL.md", "skill.md")
 SKILL_DIR_NAMES = ("skills", "skill", ".agents/skills", ".claude/skills")
 DEFAULT_SKILL_THRESHOLD = 0.2
 MAX_SKILL_TEXT = 6000
+MAX_SKILL_SHELL_TIMEOUT = 600
 SKILL_STOPWORDS = {
     "a", "an", "and", "are", "as", "at", "be", "by", "can", "do", "does", "for", "from", "how",
     "i", "in", "into", "is", "it", "its", "me", "my", "of", "on", "or", "our", "please", "should",
@@ -285,8 +286,9 @@ def cosine_similarity(left_tokens, right_tokens):
 
 
 class Skill:
-    def __init__(self, name, description, path, body, model_invocable=True):
+    def __init__(self, name, description, path, body, model_invocable=True, timeout=None):
         self.name = name
+        self.timeout = timeout
         self.description = description
         self.path = Path(path)
         self.body = body
@@ -303,7 +305,11 @@ class Skill:
         name = meta.get("name") or path.parent.name
         description = meta.get("description") or (body.strip().splitlines() or [""])[0].lstrip("# ")
         invocable = meta.get("disable-model-invocation", "false").lower() not in {"true", "yes", "1"}
-        return cls(name=name, description=description, path=path, body=body, model_invocable=invocable)
+        try:
+            timeout = min(max(int(meta["timeout"]), 1), MAX_SKILL_SHELL_TIMEOUT) if "timeout" in meta else None
+        except ValueError:
+            timeout = None
+        return cls(name=name, description=description, path=path, body=body, model_invocable=invocable, timeout=timeout)
 
     def instructions(self):
         """The skill body with {skill_dir} replaced so bundled scripts can be run by absolute path."""
@@ -725,6 +731,11 @@ class MiniAgent:
             return None, user_message
         return skill, rest.strip() or f"Run the {skill.name} skill."
 
+    def shell_timeout(self):
+        """Default run_shell timeout: 20 seconds, or the largest `timeout:` of an active skill."""
+        timeouts = [self.skills.get(name).timeout for name in self.active_skills]
+        return max([20] + [value for value in timeouts if value])
+
     def tool_use_skill(self, args):
         name = str(args.get("name", "")).strip()
         reason = str(args.get("reason", "")).strip()
@@ -923,9 +934,9 @@ class MiniAgent:
             command = str(args.get("command", "")).strip()
             if not command:
                 raise ValueError("command must not be empty")
-            timeout = int(args.get("timeout", 20))
-            if timeout < 1 or timeout > 120:
-                raise ValueError("timeout must be in [1, 120]")
+            timeout = int(args.get("timeout", self.shell_timeout()))
+            if timeout < 1 or timeout > max(120, self.shell_timeout()):
+                raise ValueError(f"timeout must be in [1, {max(120, self.shell_timeout())}]")
             return
 
         if name == "write_file":
@@ -1164,17 +1175,23 @@ class MiniAgent:
         command = str(args.get("command", "")).strip()
         if not command:
             raise ValueError("command must not be empty")
-        timeout = int(args.get("timeout", 20))
-        if timeout < 1 or timeout > 120:
-            raise ValueError("timeout must be in [1, 120]")
-        result = subprocess.run(
-            command,
-            cwd=self.root,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
+        timeout = int(args.get("timeout", self.shell_timeout()))
+        if timeout < 1 or timeout > max(120, self.shell_timeout()):
+            raise ValueError(f"timeout must be in [1, {max(120, self.shell_timeout())}]")
+        try:
+            result = subprocess.run(
+                command,
+                cwd=self.root,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
+            return (
+                f"error: command timed out after {timeout} seconds. Do not add flags to the command. "
+                f'To allow more time, pass the timeout argument, e.g. {{"command":"{command}","timeout":120}}.'
+            )
         return "\n".join(
             [
                 f"exit_code: {result.returncode}",

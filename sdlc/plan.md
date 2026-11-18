@@ -54,6 +54,11 @@ python demo/replay_demo.py --cwd tmp/lab4-demo
   living_cost sweep twice, skipped epsilon, and still reported an epsilon value. So the setup
   now adds `sweep_all.py`, which runs all four sweeps in one command, and the skill tells the
   model to run only that.
+- In the fourth run `sweep_all.py` took longer than the default 20 second `run_shell` timeout on
+  our laptop. The model kept adding `--timeout 120` to the command itself instead of the tool
+  argument and used up all 20 steps. Fix: skills can set `timeout:` in their frontmatter (tune
+  uses 300), the skill shows the exact tool call, and a timeout now returns a hint about the
+  timeout argument instead of a bare error.
 - The sweep script can take longer than the `run_shell` 120 second cap on a slow laptop. Each
   sweep takes about 3 seconds on our machine, so this is unlikely.
 - Bag of words matching misses synonyms ("make it learn faster" scores 0 for `tune`). The

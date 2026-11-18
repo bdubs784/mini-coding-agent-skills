@@ -17,6 +17,8 @@ disable-model-invocation: false      # optional, true = only the user can start 
 ```
 
 - `name` defaults to the folder name, `description` defaults to the first line of the body.
+- `timeout: N` (optional, max 600) raises the default `run_shell` timeout from 20 seconds to N
+  while that skill is active, for skills whose scripts take longer than a normal command.
 - `{skill_dir}` in the body is replaced with the skill folder path, so a skill can call its own
   bundled scripts.
 - Bodies longer than 6000 characters are clipped.

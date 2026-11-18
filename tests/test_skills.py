@@ -204,3 +204,22 @@ def test_use_skill_on_active_skill_is_logged_and_redirected(tmp_path):
     events = [e["event"] for e in read_log(tmp_path)]
     assert events.count("skill_executed") == 1
     assert "skill_already_active" in events
+
+
+def test_skill_timeout_sets_default_shell_timeout(tmp_path):
+    make_repo(tmp_path)
+    skill_md = tmp_path / "skills" / "tune" / "SKILL.md"
+    skill_md.write_text(TUNE.replace("name: tune", "name: tune\ntimeout: 300"), encoding="utf-8")
+    agent = make_agent(tmp_path, [])
+    assert agent.shell_timeout() == 20
+    agent.active_skills = ["tune"]
+    assert agent.shell_timeout() == 300
+    agent.validate_tool("run_shell", {"command": "echo hi", "timeout": 250})
+
+
+def test_shell_timeout_returns_hint_instead_of_crashing(tmp_path):
+    make_repo(tmp_path)
+    agent = make_agent(tmp_path, [])
+    result = agent.run_tool("run_shell", {"command": "python -c \"import time; time.sleep(3)\"", "timeout": 1})
+    assert "timed out after 1 seconds" in result
+    assert '"timeout":120' in result

@@ -77,8 +77,9 @@ print(f"saved all four tables to {out}")
 
 SMALL_MODEL_TUNE = {
     "2. Sweep one parameter at a time; everything else stays at the baseline":
-        "2. Run ALL FOUR sweeps with this ONE command (it saves every table to `results/hyperparams.md`):\n"
-        "   ```\n   python skills/tune/sweep_all.py\n   ```\n"
+        "2. Run ALL FOUR sweeps with this ONE tool call (it saves every table to `results/hyperparams.md`).\n"
+        "   It takes about a minute, so keep the timeout argument and do not add flags to the command:\n"
+        '   <tool>{"name":"run_shell","args":{"command":"python skills/tune/sweep_all.py","timeout":300}}</tool>\n'
         "   For reference only, do not run these yourself. It runs, one parameter at a time, everything else at the baseline",
     "4. Write `results/hyperparams.md`: the four tables, the chosen values, and one sentence per":
         "4. The four tables are already saved in `results/hyperparams.md` by `--out`, do not copy them.\n"
@@ -105,6 +106,8 @@ def adapt_tune(folder):
     missing = [old for old in SMALL_MODEL_TUNE if old not in text]
     for old, new in SMALL_MODEL_TUNE.items():
         text = text.replace(old, new)
+    if "\ntimeout:" not in text.split("\n---", 1)[0]:
+        text = text.replace("\nname: tune\n", "\nname: tune\ntimeout: 300\n", 1)
     text = text.replace("5. Report the chosen values in at most 5 lines.",
                         "5. Answer with <final> and the chosen values in at most 5 lines.")
     skill.write_text(text, encoding="utf-8")
