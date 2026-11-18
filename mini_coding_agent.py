@@ -420,6 +420,8 @@ class SkillLogger:
                 f"[{stamp}] EXECUTED skill={entry.get('skill')} via={entry.get('source')} "
                 f"score={entry.get('score')} file={entry.get('path')}"
             )
+        if event == "skill_already_active":
+            return f"[{stamp}] ALREADY ACTIVE skill={entry.get('skill')} (model called use_skill again, told to continue)"
         if event == "skill_finished":
             tools = ", ".join(entry.get("tools", [])) or "-"
             return (
@@ -672,6 +674,7 @@ class MiniAgent:
         return "\n".join([
             f"Active skill: {skill.name} (folder: {folder})",
             f"Description: {skill.description}",
+            "This skill is already loaded, do not call use_skill for it again. Start with its first step.",
             "Follow these instructions step by step. Paths in them are relative to the repo root.",
             "<skill_instructions>",
             skill.instructions(),
@@ -735,7 +738,16 @@ class MiniAgent:
             return f"error: skill '{skill.name}' can only be started by the user with /skill {skill.name}"
         score = next((item["score"] for item in ranking if item["skill"] == skill.name), None)
         if not self.activate_skill(skill, source="use_skill tool", score=score):
-            return f"skill {skill.name} is already active; follow its instructions."
+            self.skill_logger.log(
+                "skill_already_active",
+                session=self.session["id"],
+                skill=skill.name,
+                source="use_skill tool",
+            )
+            return (
+                f"skill {skill.name} is already active and its instructions are in the prompt. "
+                "Do not call use_skill again. Do the next step of the skill with run_shell, read_file, or write_file."
+            )
         return self.skill_text(skill.name)
 
     ###############################################

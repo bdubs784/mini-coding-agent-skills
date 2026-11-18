@@ -187,3 +187,20 @@ def test_skill_catalog_and_tool_are_in_prompt_and_welcome(tmp_path):
 def test_cli_flags_parse():
     args = build_arg_parser().parse_args(["--skills-dir", "x", "--skill-threshold", "0.3", "--no-skills"])
     assert args.skills_dir == ["x"] and args.skill_threshold == 0.3 and args.no_skills
+
+
+def test_use_skill_on_active_skill_is_logged_and_redirected(tmp_path):
+    make_repo(tmp_path)
+    agent = make_agent(
+        tmp_path,
+        [
+            '<tool>{"name":"use_skill","args":{"name":"tune","reason":"tune it"}}</tool>',
+            "<final>ok</final>",
+        ],
+    )
+    agent.ask("tune the gamma value")
+    tool_item = next(item for item in agent.session["history"] if item["role"] == "tool")
+    assert "Do not call use_skill again" in tool_item["content"]
+    events = [e["event"] for e in read_log(tmp_path)]
+    assert events.count("skill_executed") == 1
+    assert "skill_already_active" in events
