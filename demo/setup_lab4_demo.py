@@ -13,9 +13,10 @@ Edits to the Lab 5 skills:
 - path fixes: ".claude/skills/" becomes "skills/" in SKILL.md, and the scripts look for src/
   one folder higher (parents[3] -> parents[2]).
 - tune, adapted for a 4B local model (see SMALL_MODEL_TUNE): sweep.py gets an --out flag that
-  appends each table to a file, so the model does not have to retype four tables into one long
-  write_file call (qwen3.5:4b ran out of output tokens doing that). The model only writes the
-  short file with the chosen values. Pass --original-skills to skip this.
+  appends each table to a file, and a new sweep_all.py runs all four sweeps in one command.
+  qwen3.5:4b ran out of output tokens retyping the tables, and in the next run it ran one sweep
+  twice and skipped epsilon. Now the model runs one command, reads the tables, and only writes
+  the short file with the chosen values. Pass --original-skills to skip this.
 
 Usage:
     python demo/setup_lab4_demo.py --lab4 PATH_TO_LAB4_REPO --lab5 PATH_TO_LAB5_REPO --out tmp/lab4-demo
@@ -47,11 +48,38 @@ SWEEP_OUT_ARG = """    parser.add_argument("--out", help="Also append the table 
         sys.stdout = Tee()
 """
 
+SWEEP_ALL = r'''"""Run all four tune sweeps in one command (added for small local models).
+
+Same commands as step 2 of SKILL.md. Starts results/hyperparams.md fresh, then sweep.py --out
+appends each table, so a sweep can not be skipped or written twice.
+"""
+import subprocess
+import sys
+from pathlib import Path
+
+SWEEPS = [
+    ("living_cost", ["-2", "-0.4", "-0.04", "0", "1"]),
+    ("gamma", ["0.5", "0.7", "0.9", "0.99"]),
+    ("alpha", ["0.05", "0.1", "0.3", "0.5", "0.9"]),
+    ("epsilon", ["0.05", "0.2", "0.5", "0.8", "1.0"]),
+]
+
+out = Path("results/hyperparams.md")
+out.parent.mkdir(parents=True, exist_ok=True)
+out.write_text("# Hyperparameter sweeps\n\n", encoding="utf-8")
+sweep = Path(__file__).with_name("sweep.py")
+for param, values in SWEEPS:
+    subprocess.run([sys.executable, str(sweep), "--param", param, "--values", *values, "--out", str(out)], check=True)
+    with out.open("a", encoding="utf-8") as handle:
+        handle.write("\n")
+print(f"saved all four tables to {out}")
+'''
+
 SMALL_MODEL_TUNE = {
-    "--values -2 -0.4 -0.04 0 1": "--values -2 -0.4 -0.04 0 1 --out results/hyperparams.md",
-    "--values 0.5 0.7 0.9 0.99": "--values 0.5 0.7 0.9 0.99 --out results/hyperparams.md",
-    "--values 0.05 0.1 0.3 0.5 0.9": "--values 0.05 0.1 0.3 0.5 0.9 --out results/hyperparams.md",
-    "--values 0.05 0.2 0.5 0.8 1.0": "--values 0.05 0.2 0.5 0.8 1.0 --out results/hyperparams.md",
+    "2. Sweep one parameter at a time; everything else stays at the baseline":
+        "2. Run ALL FOUR sweeps with this ONE command (it saves every table to `results/hyperparams.md`):\n"
+        "   ```\n   python skills/tune/sweep_all.py\n   ```\n"
+        "   For reference only, do not run these yourself. It runs, one parameter at a time, everything else at the baseline",
     "4. Write `results/hyperparams.md`: the four tables, the chosen values, and one sentence per":
         "4. The four tables are already saved in `results/hyperparams.md` by `--out`, do not copy them.\n"
         "   Use write_file to create `results/hyperparams-choice.md` with only the chosen values and one sentence per",
@@ -72,6 +100,7 @@ def adapt_tune(folder):
             if line not in code:
                 code = line + "\n" + code
         sweep.write_text(code, encoding="utf-8")
+    (folder / "sweep_all.py").write_text(SWEEP_ALL, encoding="utf-8")
     text = skill.read_text(encoding="utf-8")
     missing = [old for old in SMALL_MODEL_TUNE if old not in text]
     for old, new in SMALL_MODEL_TUNE.items():

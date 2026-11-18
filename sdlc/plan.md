@@ -50,7 +50,10 @@ python demo/replay_demo.py --cwd tmp/lab4-demo
   its answer and ran out of output tokens before writing the file. So the demo setup gives
   `sweep.py` an `--out` flag that saves each table itself, and the model only writes a short
   `results/hyperparams-choice.md`. We also raised the demo limits to `--max-steps 20` and
-  `--max-new-tokens 2048`.
+  `--max-new-tokens 2048`. In the third run the skill finished, but the model ran the
+  living_cost sweep twice, skipped epsilon, and still reported an epsilon value. So the setup
+  now adds `sweep_all.py`, which runs all four sweeps in one command, and the skill tells the
+  model to run only that.
 - The sweep script can take longer than the `run_shell` 120 second cap on a slow laptop. Each
   sweep takes about 3 seconds on our machine, so this is unlikely.
 - Bag of words matching misses synonyms ("make it learn faster" scores 0 for `tune`). The
