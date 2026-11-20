@@ -1,0 +1,25 @@
+{
+  "name": "lab4-demo",
+  "description": "Solve Lab 4 with the Lab 5 skills through mini-coding-agent and check the skills log.",
+  "setup": "python demo/setup_lab4_demo.py --lab4 PATH_TO_LAB4 --lab5 PATH_TO_LAB5 --out tmp/lab4-demo --force",
+  "run": "python mini_coding_agent.py --cwd tmp/lab4-demo --model qwen3.5:4b --approval auto --max-steps 20 --max-new-tokens 2048",
+  "prompts": [
+    "Tune the hyperparameters for the vacuum Q-learner and report the values you picked",
+    "Solve Lab 4: train the vacuum Q-learning agent and show the learned policy compared to value iteration",
+    "List the files in src",
+    "The robot should get to the charger more reliably, figure out what to change",
+    "/skill submit-check",
+    "/exit"
+  ],
+  "checks": [
+    {"name": "tune triggered by the prompt", "requirements": ["R2", "R3"]},
+    {"name": "tune answer copies the picked values from results/hyperparams.md", "requirements": ["R4"]},
+    {"name": "render-policy triggered by the prompt and finished", "requirements": ["R2", "R4"]},
+    {"name": "unrelated prompt selects no skill", "requirements": ["R2"]},
+    {"name": "charger prompt loads a skill with use_skill (soft: logged, not required)", "requirements": ["R3"]},
+    {"name": "submit-check runs through explicit /skill", "requirements": ["R3"]},
+    {"name": "every executed skill has a FINISHED event", "requirements": ["R5"]},
+    {"name": "every skill ends with a real answer, not a tool call", "requirements": ["R4"]}
+  ],
+  "grader": "python evals/check_demo_log.py tmp/lab4-demo"
+}

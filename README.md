@@ -12,7 +12,7 @@ with a `use_skill` tool. Every prompt, similarity check, and executed skill is l
 
 Quick links: [What we added](#agent-skills-what-we-added) ·
 [Run the Lab 4 demo](#run-the-lab-4-demo) · SDLC: [intent](sdlc/intent.md) ·
-[spec](sdlc/spec.md) · [plan](sdlc/plan.md)
+[spec](sdlc/spec.md) · [plan](sdlc/plan.md) · [evals](evals/README.md)
 
 &nbsp;
 ## Agent Skills: what we added
@@ -25,23 +25,30 @@ mini-coding-agent/
 │                             #   MiniAgent.match_skills / activate_skill / tool_use_skill
 ├── skills/
 │   └── pr-review/SKILL.md    # example skill (folder skill format)
-├── sdlc/                     # SDLC stages for this change
-│   ├── intent.md             #   1. what and why
-│   ├── spec.md               #   2. exact behavior + acceptance tests
-│   └── plan.md               #   3. design decisions, task list, verification, risks
+├── sdlc/                     # AI-native SDLC stages, as in the lecture
+│   ├── intent.md             #   1. Plan: problem, outcome, users, constraints, open questions
+│   ├── spec.md               #   2. Design: numbered requirements R1-R6, design, concerns + owners
+│   └── plan.md               #   3. Build: files, decisions, order of work, risks, proof (tests per R)
+├── evals/                    #   4. Test: the Lab 4 eval, its grader, and the history of real runs
+│   ├── lab4-demo.json        #      prompts + checks (cites R numbers)
+│   ├── check_demo_log.py     #      deterministic grader for a run's skills.jsonl
+│   └── README.md             #      what each real run got wrong and what we changed
 ├── demo/
 │   ├── setup_lab4_demo.py    # builds the Lab 4 workspace with our Lab 5 skills in skills/
 │   ├── replay_demo.py        # offline run of the demo with scripted model replies (no Ollama)
-│   └── logs/                 # log files saved from our real Ollama run
+│   └── logs/                 # log files copied from our real Ollama run
 ├── tests/
 │   ├── test_mini_coding_agent.py   # original tests (unchanged)
-│   └── test_skills.py              # tests for the skills component
+│   ├── test_skills.py              # tests for the skills component
+│   └── test_evals.py               # tests for the eval grader
+├── group_23.txt              # repository links for the submission
+├── EXAMPLE.md                # original usage example
 └── README.md
 ```
 
 ### How it works
 
-1. **Discovery.** At start the agent loads every `<folder>/<skill>/SKILL.md` under `skills/`,
+1. **Discovery.** At start the agent loads every `<folder>/<skill>/SKILL.md` (or `skill.md`) under `skills/`,
    `skill/`, `.agents/skills/`, and `.claude/skills/` in the workspace (plus any `--skills-dir`).
    The frontmatter gives `name`, `description`, and optionally `disable-model-invocation: true`.
 2. **Similarity check.** For each prompt, every skill gets a score: 1.0 if the skill name is in
@@ -50,18 +57,26 @@ mini-coding-agent/
 3. **Execution.** The active skill's steps are added to the prompt as an `Active skill` section,
    and the model carries them out with the normal tools (same approval rules).
 4. **Mid-task.** The model can call `use_skill(name, reason)` when it realizes it needs a skill.
-   The user can force one with `/skill NAME` or `/NAME`.
+   When the word match picks nothing, the prompt lists the skills once more and reminds the model
+   it can call `use_skill`. The user can force a skill with `/skill NAME` or `/NAME`.
 5. **Logs.** `.mini-coding-agent/logs/skills.log` (readable) and `skills.jsonl` (one JSON per
    event): `prompt`, `similarity_check` (all scores, threshold, selected), `skill_executed`
    (skill, trigger, score, file), `skill_finished` (tools used, final answer).
 
-Example `skills.log`:
+Example `skills.log`, lines from our real Ollama run in [demo/logs/](demo/logs/) (paths shortened):
 
 ```
-[2026-11-17 18:00:45] PROMPT (user): Tune the hyperparameters for the vacuum Q-learner: choose gamma, alpha, epsilon and the living reward.
-[2026-11-17 18:00:45] SIMILARITY (user prompt) threshold=0.2 scores: tune=1.000, render-policy=0.043 -> selected: tune
-[2026-11-17 18:00:45] EXECUTED skill=tune via=user prompt score=1.0 file=.../skills/tune/SKILL.md
-[2026-11-17 18:00:47] FINISHED skill=tune tools=[list_files, run_shell] result: Ran the gamma sweep ...
+[2026-11-18 14:37:21] PROMPT (user): Tune the hyperparameters for the vacuum Q-learner and report the values you picked
+[2026-11-18 14:37:21] SIMILARITY (user prompt) threshold=0.2 scores: tune=1.000, render-policy=0.103 -> selected: tune
+[2026-11-18 14:37:21] EXECUTED skill=tune via=user prompt score=1.0 file=...\tmp\lab4-demo\skills\tune\SKILL.md
+[2026-11-18 14:37:59] FINISHED skill=tune tools=[run_shell] result: - living_cost = -0.04: success 100%, VI match 90%, 7.7 steps - gamma...ite old estimates, and epsilon balances exploration and exploitation.
+[2026-11-18 14:38:08] PROMPT (user): List the files in src
+[2026-11-18 14:38:08] SIMILARITY (user prompt) threshold=0.2 scores: render-policy=0.000, tune=0.000 -> selected: none
+[2026-11-18 14:38:14] PROMPT (user): The robot should get to the charger more reliably, figure out what to change
+[2026-11-18 14:38:14] SIMILARITY (user prompt) threshold=0.2 scores: render-policy=0.000, tune=0.000 -> selected: none
+[2026-11-18 14:38:17] PROMPT (use_skill tool): The user wants to improve reliability by tuning hyperparameters. The skill 'tune' handles hyperparameter sweeps for the vacuum Q-learner.
+[2026-11-18 14:38:17] SIMILARITY (use_skill tool) threshold=0.2 scores: tune=1.000, render-policy=0.032 -> selected: tune
+[2026-11-18 14:38:17] EXECUTED skill=tune via=use_skill tool score=1.0 file=...\tmp\lab4-demo\skills\tune\SKILL.md
 ```
 
 New flags: `--skills-dir PATH` (repeatable), `--skill-threshold 0.2`, `--no-skills`.
@@ -72,11 +87,15 @@ New REPL commands: `/skills` (list skills and log path), `/skill NAME [task]`.
 
 Lab 4 set up the vacuum Q-learning problem for a coding agent. Lab 5 solved it with Claude Code
 and added the skills `tune`, `render-policy`, and `submit-check`. The demo workspace is our Lab 4
-repo plus the Lab 5 `src/` code and the Lab 5 skills moved to `skills/`. The setup fixes paths,
-and gives the `tune` skill a `--out` flag so the small model does not have to retype four tables
-(see `demo/setup_lab4_demo.py` and the Risks section of `sdlc/plan.md`).
+repo plus the Lab 5 `src/` code (our Q-learning solution, copied in, not rewritten by the agent)
+and the Lab 5 skills moved to `skills/`. The setup fixes paths and adapts the skills for a 4B
+model: `tune` gets one `sweep_all.py` command that runs all four sweeps, saves the tables, and
+applies the skill's step 3 selection rule, plus `timeout: 300`; `render.py` also prints the cells
+where the learned policy and value iteration differ; `submit-check` runs its script once and
+answers. Each change fixed a failure in a real run (see `evals/README.md`). Pass
+`--original-skills` to get the Lab 5 skills with path fixes only.
 
-Needs Python 3.10+, numpy, and Ollama with a model pulled (`ollama pull qwen3.5:4b`).
+Needs Python 3.10+, numpy (`pip install numpy`), and Ollama with a model pulled (`ollama pull qwen3.5:4b`).
 
 ```bash
 # 1. build the workspace (paths to your clones of our Lab 4 and Lab 5 repos)
@@ -87,16 +106,28 @@ python demo/replay_demo.py --cwd tmp/lab4-demo
 
 # 3. real run with Ollama
 python mini_coding_agent.py --cwd tmp/lab4-demo --approval auto --max-steps 20 --max-new-tokens 2048
+
+# 4. grade the run (stage 4, evals/): prints PASS/FAIL per check
+python evals/check_demo_log.py tmp/lab4-demo
 ```
+
+To feed the prompts below without typing them, put one per line in `prompts.txt` (ending with
+`/exit`) and run `Get-Content prompts.txt | python mini_coding_agent.py --cwd tmp/lab4-demo ...`
+in PowerShell.
 
 Prompts we use in the REPL:
 
 ```
 /skills
-Tune the hyperparameters for the vacuum Q-learner and write results/hyperparams.md
+Tune the hyperparameters for the vacuum Q-learner and report the values you picked
 Solve Lab 4: train the vacuum Q-learning agent and show the learned policy compared to value iteration
+List the files in src
+The robot should get to the charger more reliably, figure out what to change
 /skill submit-check
 ```
+
+`List the files in src` shows a similarity check with no skill selected. The charger prompt shares
+few words with any skill, so the model may load `tune` itself with the `use_skill` tool.
 
 Then open `tmp/lab4-demo/.mini-coding-agent/logs/skills.log`.
 

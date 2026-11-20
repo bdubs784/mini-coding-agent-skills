@@ -82,6 +82,20 @@ def test_discover_also_scans_claude_skills_folder(tmp_path):
     assert "tune" in SkillRegistry.discover([tmp_path]).skills
 
 
+def test_discover_scans_singular_skill_folder(tmp_path):
+    make_repo(tmp_path, skills_folder="skill")
+    assert sorted(SkillRegistry.discover([tmp_path]).skills) == ["pr-review", "submit-check", "tune"]
+
+
+def test_discover_reads_lowercase_skill_md(tmp_path):
+    folder = tmp_path / "skill" / "pr-review"
+    folder.mkdir(parents=True)
+    (folder / "skill.md").write_text(PR_REVIEW, encoding="utf-8")
+    skill = SkillRegistry.discover([tmp_path]).get("pr-review")
+    assert skill is not None
+    assert "Run `git diff`" in skill.instructions()
+
+
 def test_similarity_picks_matching_skill_and_skips_unrelated_prompt(tmp_path):
     registry = SkillRegistry.discover([make_repo(tmp_path)])
     skill, ranking = registry.select("Please review my pull request diff for bugs")
@@ -126,6 +140,29 @@ def test_unrelated_prompt_logs_check_but_runs_no_skill(tmp_path):
     assert [e["event"] for e in events] == ["prompt", "similarity_check"]
     assert events[1]["selected"] is None
     assert "Active skill: " not in agent.model_client.prompts[0]
+
+
+def test_no_match_hint_lists_model_skills_until_one_is_loaded(tmp_path):
+    make_repo(tmp_path)
+    agent = make_agent(
+        tmp_path,
+        [
+            '<tool>{"name":"use_skill","args":{"name":"tune","reason":"need to choose gamma"}}</tool>',
+            "<final>Tuned.</final>",
+        ],
+    )
+    agent.ask("make the robot learn faster")
+    first, second = agent.model_client.prompts
+    assert "Skill check: no skill matched" in first
+    assert "- tune: " in first and "- submit-check: " not in first.split("Skill check:")[1]
+    assert "Skill check: no skill matched" not in second  # gone once tune is active
+
+
+def test_matched_prompt_gets_no_hint(tmp_path):
+    make_repo(tmp_path)
+    agent = make_agent(tmp_path, ["<final>Reviewed.</final>"])
+    agent.ask("Review the pull request diff for bugs")
+    assert "Skill check: no skill matched" not in agent.model_client.prompts[0]
 
 
 def test_model_can_load_skill_mid_execution(tmp_path):

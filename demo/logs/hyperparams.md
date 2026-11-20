@@ -39,3 +39,9 @@ Sweep: epsilon | baseline {'living_cost': -0.04, 'alpha': 0.5, 'gamma': 0.9, 'ep
 | 0.8 | 100 ± 0 | 7.7 | 9.65 | 90 |
 | 1 | 98 ± 2 | 7.7 | 9.62 | 90 |
 
+## Values picked by the step 3 rule
+
+- living_cost = -0.04: success 100%, VI match 90%, 7.7 steps
+- gamma = 0.9: success 100%, VI match 90%, 7.7 steps
+- alpha = 0.5: success 100%, VI match 90%, 7.7 steps
+- epsilon = 0.8: success 100%, VI match 90%, 7.7 steps

@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -241,7 +242,7 @@ class OllamaModelClient:
 ##############################
 def parse_frontmatter(text):
     """Split a SKILL.md file into (metadata dict, body). Supports simple `key: value` YAML."""
-    text = text.lstrip("﻿")
+    text = text.lstrip("\ufeff")
     if not text.startswith("---"):
         return {}, text
     end = text.find("\n---", 3)
@@ -475,6 +476,7 @@ class MiniAgent:
         self.skill_logger = skill_logger or SkillLogger(self.root / ".mini-coding-agent" / "logs")
         self.active_skills = []
         self.skill_tools_used = []
+        self.skill_hint = ""
         self.tools = self.build_tools()
         self.prefix = self.build_prefix()
         self.session_path = self.session_store.save(self.session)
@@ -662,6 +664,8 @@ class MiniAgent:
     def prompt(self, user_message):
         parts = [self.prefix, self.memory_text()]
         parts.extend(self.skill_text(name) for name in self.active_skills)
+        if self.skill_hint and not self.active_skills:
+            parts.append(self.skill_hint)
         parts.extend([
             "Transcript:\n" + self.history_text(),
             "Current user request:\n" + user_message,
@@ -680,11 +684,23 @@ class MiniAgent:
         return "\n".join([
             f"Active skill: {skill.name} (folder: {folder})",
             f"Description: {skill.description}",
-            "This skill is already loaded, do not call use_skill for it again. Start with its first step.",
+            "Its instructions are below, so there is no need to call use_skill for it. Start with its first step now.",
             "Follow these instructions step by step. Paths in them are relative to the repo root.",
             "<skill_instructions>",
             skill.instructions(),
             "</skill_instructions>",
+        ])
+
+    def no_match_hint(self):
+        """Shown when the word match picked no skill: bag of words misses synonyms, so the model
+        gets one direct reminder to decide for itself whether a skill fits (use_skill)."""
+        lines = [f"- {skill.name}: {skill.description}" for skill in self.skills.skills.values() if skill.model_invocable]
+        if not lines:
+            return ""
+        return "\n".join([
+            "Skill check: no skill matched this request by its words. "
+            "If one of these skills fits the task, call use_skill with its name first. Otherwise ignore this.",
+            *lines,
         ])
 
     def match_skills(self, text, source):
@@ -729,7 +745,7 @@ class MiniAgent:
         skill = self.skills.get(head) if self.skills else None
         if skill is None:
             return None, user_message
-        return skill, rest.strip() or f"Run the {skill.name} skill."
+        return skill, rest.strip() or f"Follow the steps of the active skill {skill.name}, then answer."
 
     def shell_timeout(self):
         """Default run_shell timeout: 20 seconds, or the largest `timeout:` of an active skill."""
@@ -780,6 +796,7 @@ class MiniAgent:
         memory = self.session["memory"]
         self.active_skills = []
         self.skill_tools_used = []
+        self.skill_hint = ""
         forced, user_message = self.explicit_skill(user_message)
         if not memory["task"]:
             memory["task"] = clip(user_message.strip(), 300)
@@ -801,6 +818,8 @@ class MiniAgent:
                 skill, ranking = self.match_skills(user_message, source="user prompt")
                 if skill is not None:
                     self.activate_skill(skill, source="user prompt", score=ranking[0]["score"])
+                else:
+                    self.skill_hint = self.no_match_hint()
 
         final = self.run_loop(user_message)
         if self.active_skills:
@@ -1185,6 +1204,9 @@ class MiniAgent:
                 shell=True,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
                 timeout=timeout,
             )
         except subprocess.TimeoutExpired:
@@ -1394,7 +1416,8 @@ def main(argv=None):
 
     while True:
         try:
-            user_input = input("\nmini-coding-agent> ").strip()
+            # Piped input on Windows can start with a UTF-8 byte order mark.
+            user_input = input("\nmini-coding-agent> ").replace("\ufeff", "").strip()
         except (EOFError, KeyboardInterrupt):
             print("")
             return 0
