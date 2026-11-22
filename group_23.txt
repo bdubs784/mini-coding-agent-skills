@@ -1,6 +1,6 @@
 Group 23: Andrew Barnett, Blaine Watkins
 
-Repository (private, instructors added as collaborators):
+Repository:
 https://github.com/bdubs784/mini-coding-agent-skills
 
 Demo workspace sources:
